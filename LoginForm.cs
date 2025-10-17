@@ -61,6 +61,7 @@ namespace WinFormsApp2
         }
 
         // === Google Login через LocalServerCodeReceiver ===
+
         private async void buttonGoogleLogin_Click(object sender, EventArgs e)
         {
             try
@@ -80,29 +81,24 @@ namespace WinFormsApp2
                     DataStore = new FileDataStore("GoogleOAuthToken")
                 });
 
-                var codeReceiver = new LocalServerCodeReceiver();
+                // ✅ Використовуємо PromptCodeReceiver замість LocalServerCodeReceiver
+                var codeReceiver = new PromptCodeReceiver();
                 var app = new AuthorizationCodeInstalledApp(flow, codeReceiver);
 
                 var credential = await app.AuthorizeAsync("user", CancellationToken.None);
 
-                // 🔹 Якщо токен протермінувався — онови його
                 if (credential.Token.IsExpired(SystemClock.Default))
                 {
                     await credential.RefreshTokenAsync(CancellationToken.None);
                 }
 
-                // 🔹 Отримай новий IdToken після оновлення
                 string idToken = credential.Token.IdToken;
-
-                // Якщо навіть після оновлення IdToken порожній — запроси новий логін
                 if (string.IsNullOrEmpty(idToken))
                 {
-                    // Повторна авторизація
                     credential = await app.AuthorizeAsync("user", CancellationToken.None);
                     idToken = credential.Token.IdToken;
                 }
 
-                // 🔹 Тепер безпечна перевірка токена
                 var payload = await GoogleJsonWebSignature.ValidateAsync(idToken);
                 string email = payload.Email;
                 string name = payload.Name;
@@ -131,3 +127,4 @@ namespace WinFormsApp2
         }
     }
 }
+    
