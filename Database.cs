@@ -113,7 +113,20 @@ namespace WinFormsApp2
 
         internal static bool ValidatePassword(string email, string hashedInput)
         {
-            throw new NotImplementedException();
+            using (var conn = new SQLiteConnection(connectionString))
+            {
+                conn.Open();
+                string sql = "SELECT password FROM Users WHERE email=@Email";
+                using (var cmd = new SQLiteCommand(sql, conn))
+                {
+                    cmd.Parameters.AddWithValue("@Email", email);
+                    var result = cmd.ExecuteScalar();
+                    if (result == null) return false;
+
+                    string storedHash = result.ToString();
+                    return storedHash == hashedInput;
+                }
+            }
         }
     }
 }

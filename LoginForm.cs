@@ -7,6 +7,7 @@ using Google.Apis.Auth.OAuth2.Flows;
 using Google.Apis.Auth.OAuth2.Responses;
 using Google.Apis.Auth;
 using Google.Apis.Util.Store;
+using Google.Apis.Util;
 
 namespace WinFormsApp2
 {
@@ -79,33 +80,43 @@ namespace WinFormsApp2
                     DataStore = new FileDataStore("GoogleOAuthToken")
                 });
 
-                // 🔹 Простий LocalServerCodeReceiver без FixedPortReceiver
                 var codeReceiver = new LocalServerCodeReceiver();
                 var app = new AuthorizationCodeInstalledApp(flow, codeReceiver);
 
                 var credential = await app.AuthorizeAsync("user", CancellationToken.None);
 
-                if (credential != null && credential.Token != null && !string.IsNullOrEmpty(credential.Token.AccessToken))
+                // 🔹 Якщо токен протермінувався — онови його
+                if (credential.Token.IsExpired(SystemClock.Default))
                 {
-                    var payload = await GoogleJsonWebSignature.ValidateAsync(credential.Token.IdToken);
-                    string email = payload.Email;
-                    string name = payload.Name;
-
-                    if (!Database.UserExists(email))
-                        Database.AddUser(name ?? email, email, "google_auth");
-
-                    MessageBox.Show($"Вітаємо, {name ?? email}!\nВхід через Google успішний.",
-                        "Успіх", MessageBoxButtons.OK, MessageBoxIcon.Information);
-
-                    var adminForm = new AdminForm();
-                    adminForm.FormClosed += (s, args) => this.Close();
-                    adminForm.Show();
-                    this.Hide();
+                    await credential.RefreshTokenAsync(CancellationToken.None);
                 }
-                else
+
+                // 🔹 Отримай новий IdToken після оновлення
+                string idToken = credential.Token.IdToken;
+
+                // Якщо навіть після оновлення IdToken порожній — запроси новий логін
+                if (string.IsNullOrEmpty(idToken))
                 {
-                    MessageBox.Show("Не вдалося отримати токен від Google.", "Помилка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    // Повторна авторизація
+                    credential = await app.AuthorizeAsync("user", CancellationToken.None);
+                    idToken = credential.Token.IdToken;
                 }
+
+                // 🔹 Тепер безпечна перевірка токена
+                var payload = await GoogleJsonWebSignature.ValidateAsync(idToken);
+                string email = payload.Email;
+                string name = payload.Name;
+
+                if (!Database.UserExists(email))
+                    Database.AddUser(name ?? email, email, "google_auth");
+
+                MessageBox.Show($"Вітаємо, {name ?? email}!\nВхід через Google успішний.",
+                    "Успіх", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+                var adminForm = new AdminForm();
+                adminForm.FormClosed += (s, args) => this.Close();
+                adminForm.Show();
+                this.Hide();
             }
             catch (TokenResponseException tex)
             {
